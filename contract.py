@@ -40,6 +40,17 @@ class ContractLine:
         if to_write:
             cls.write(*to_write)
 
+        # Compatibility with contract_discount module
+        to_write = []
+        for line in lines:
+            if hasattr(line, 'gross_unit_price'):
+                old_unit_price = line.unit_price
+                line.update_prices()
+                if old_unit_price != line.unit_price:
+                    to_write.append(line)
+        if to_write:
+            cls.save(to_write)
+
 
 class RecomputePriceStart(ModelView):
     'Recompute Price - Start'
