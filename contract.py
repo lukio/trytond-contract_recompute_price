@@ -142,7 +142,7 @@ class RecomputePrice(Wizard):
             domain = [('contract_state', '=', 'confirmed')]
             if self.start.categories:
                 categories = [cat.id for cat in list(self.start.categories)]
-                domain.append(('service.product.categories', 'in', categories))
+                domain.append(('service.product.category', 'in', categories))
             method(ContractLine.search(domain),
                 **self.get_additional_args())
         return 'end'
