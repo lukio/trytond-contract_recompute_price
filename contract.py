@@ -1,6 +1,6 @@
 # The COPYRIGHT file at the top level of this repository contains the full
 # copyright notices and license terms.
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from trytond.model import ModelView, fields
 from trytond.pool import Pool, PoolMeta
@@ -31,6 +31,31 @@ class ContractLine:
         return values
 
     @classmethod
+    def _recompute_price_by_factor(cls, line, factor):
+        new_list_price = (line.unit_price * factor).quantize(
+            Decimal('1.'), rounding=ROUND_HALF_UP)
+        values = {
+            'unit_price': new_list_price,
+            }
+        # Compatibility with contract_discount module
+        if hasattr(line, 'gross_unit_price'):
+            new_gross_unit_price = (line.unit_price * factor).quantize(
+                Decimal('1.'), rounding=ROUND_HALF_UP)
+            values['gross_unit_price'] = new_gross_unit_price
+        return values
+
+    @classmethod
+    def recompute_price_by_percentage(cls, lines, percentage):
+        to_write = []
+        factor = Decimal(1) + Decimal(percentage)
+        for line in lines:
+            new_values = cls._recompute_price_by_factor(line, factor)
+            if new_values:
+                to_write.extend(([line], new_values))
+        if to_write:
+            cls.write(*to_write)
+
+    @classmethod
     def recompute_price_by_product_price(cls, lines):
         to_write = []
         for line in lines:
@@ -57,6 +82,7 @@ class RecomputePriceStart(ModelView):
     __name__ = 'contract.recompute_price.start'
 
     method = fields.Selection([
+            ('percentage', 'By Percentage'),
             ('product_price', 'By Product price'),
             ('fixed_amount', 'Fixed Amount'),
             ], 'Recompute Method', required=True)
@@ -66,6 +92,17 @@ class RecomputePriceStart(ModelView):
             'required': Eval('method') == 'fixed_amount',
             },
         depends=['method'])
+    percentage = fields.Float('Percentage', digits=(16, 4),
+        states={
+            'invisible': Eval('method') != 'percentage',
+            'required': Eval('method') == 'percentage',
+            },
+        depends=['method'])
+    categories = fields.Many2Many('product.category', None, None, 'Categories',
+        states={
+            'invisible': Eval('method') != 'percentage',
+            'required': Eval('method') == 'percentage',
+            }, depends=['method'])
 
 
 class RecomputePrice(Wizard):
@@ -90,6 +127,11 @@ class RecomputePrice(Wizard):
             'list_price': self.start.list_price,
             }
 
+    def get_additional_args_percentage(self):
+        return {
+            'percentage': self.start.percentage,
+            }
+
     def transition_compute(self):
         pool = Pool()
         ContractLine = pool.get('contract.line')
@@ -97,6 +139,10 @@ class RecomputePrice(Wizard):
         method_name = 'recompute_price_by_%s' % self.start.method
         method = getattr(ContractLine, method_name)
         if method:
-            method(ContractLine.search([('contract_state', '=', 'confirmed')]),
+            domain = [('contract_state', '=', 'confirmed')]
+            if self.start.categories:
+                categories = [cat.id for cat in list(self.start.categories)]
+                domain.append(('service.product.categories', 'in', categories))
+            method(ContractLine.search(domain),
                 **self.get_additional_args())
         return 'end'

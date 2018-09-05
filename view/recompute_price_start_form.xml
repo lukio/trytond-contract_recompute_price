@@ -11,4 +11,7 @@
     <label name="list_price"/>
     <field name="list_price"/>
     <newline/>
+    <label name="percentage"/>
+    <field name="percentage" factor="100"/>
+    <field name="categories" colspan="4"/>
 </form>
