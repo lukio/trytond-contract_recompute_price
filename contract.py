@@ -15,6 +15,16 @@ class ContractLine:
     __name__ = 'contract.line'
     __metaclass__ = PoolMeta
 
+    @classmethod
+    def _recompute_price_by_fixed_amount(cls, line, new_unit_price):
+        values = {
+            'unit_price': new_unit_price,
+            }
+        # Compatibility with contract_discount module
+        if hasattr(line, 'gross_unit_price'):
+            values['gross_unit_price'] = new_unit_price
+        return values
+
     def _recompute_price_by_service(self):
         digits = self.__class__.unit_price.digits[1]
         new_unit_price = (self.service.product.list_price).quantize(
@@ -76,6 +86,27 @@ class ContractLine:
         if to_write:
             cls.save(to_write)
 
+    @classmethod
+    def recompute_price_by_fixed_amount(cls, lines, unit_price):
+        to_write = []
+        for line in lines:
+            new_values = line._recompute_price_by_fixed_amount(line, unit_price)
+            if new_values:
+                to_write.extend(([line], new_values))
+        if to_write:
+            cls.write(*to_write)
+
+        # Compatibility with contract_discount module
+        to_write = []
+        for line in lines:
+            if hasattr(line, 'gross_unit_price'):
+                old_unit_price = line.unit_price
+                line.update_prices()
+                if old_unit_price != line.unit_price:
+                    to_write.append(line)
+        if to_write:
+            cls.save(to_write)
+
 
 class RecomputePriceStart(ModelView):
     'Recompute Price - Start'
@@ -86,7 +117,7 @@ class RecomputePriceStart(ModelView):
             ('product_price', 'By Product price'),
             ('fixed_amount', 'Fixed Amount'),
             ], 'Recompute Method', required=True)
-    list_price = fields.Numeric('List Price', digits=price_digits,
+    unit_price = fields.Numeric('Unit Price', digits=price_digits,
         states={
             'invisible': Eval('method') != 'fixed_amount',
             'required': Eval('method') == 'fixed_amount',
@@ -103,6 +134,15 @@ class RecomputePriceStart(ModelView):
             'invisible': Eval('method') != 'percentage',
             'required': Eval('method') == 'percentage',
             }, depends=['method'])
+    services = fields.Many2Many('contract.service', None, None, 'Services',
+        states={
+            'invisible': Eval('method') != 'fixed_amount',
+            'required': Eval('method') == 'fixed_amount',
+            }, depends=['method'])
+
+    @staticmethod
+    def default_method():
+        return 'percentage'
 
 
 class RecomputePrice(Wizard):
@@ -124,7 +164,7 @@ class RecomputePrice(Wizard):
 
     def get_additional_args_fixed_amount(self):
         return {
-            'list_price': self.start.list_price,
+            'unit_price': self.start.unit_price,
             }
 
     def get_additional_args_percentage(self):
@@ -140,9 +180,12 @@ class RecomputePrice(Wizard):
         method = getattr(ContractLine, method_name)
         if method:
             domain = [('contract_state', '=', 'confirmed')]
-            if self.start.categories:
+            if self.start.method == 'percentage' and self.start.categories:
                 categories = [cat.id for cat in list(self.start.categories)]
                 domain.append(('service.product.category', 'in', categories))
+            if self.start.method == 'fixed_amount' and self.start.services:
+                services = [s.id for s in list(self.start.services)]
+                domain.append(('service', 'in', services))
             method(ContractLine.search(domain),
                 **self.get_additional_args())
         return 'end'
