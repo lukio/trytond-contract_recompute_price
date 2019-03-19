@@ -3,6 +3,7 @@
 from trytond.pool import Pool
 from . import contract
 
+
 def register():
     Pool.register(
         contract.ContractLine,

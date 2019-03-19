@@ -105,7 +105,4 @@ setup(name='%s_%s' % (PREFIX, MODULE),
     test_loader='trytond.test_loader:Loader',
     tests_require=tests_require,
     use_2to3=True,
-    convert_2to3_doctests=[
-        'tests/scenario_product_recompute_price.rst',
-        ],
     )

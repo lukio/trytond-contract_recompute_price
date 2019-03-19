@@ -90,7 +90,8 @@ class ContractLine:
     def recompute_price_by_fixed_amount(cls, lines, unit_price):
         to_write = []
         for line in lines:
-            new_values = line._recompute_price_by_fixed_amount(line, unit_price)
+            new_values = line._recompute_price_by_fixed_amount(line,
+                unit_price)
             if new_values:
                 to_write.extend(([line], new_values))
         if to_write:
