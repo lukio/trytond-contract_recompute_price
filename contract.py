@@ -11,9 +11,8 @@ from trytond.modules.product.product import price_digits
 __all__ = ['ContractLine', 'RecomputePriceStart', 'RecomputePrice']
 
 
-class ContractLine:
+class ContractLine(metaclass=PoolMeta):
     __name__ = 'contract.line'
-    __metaclass__ = PoolMeta
 
     @classmethod
     def _recompute_price_by_fixed_amount(cls, line, new_unit_price):
